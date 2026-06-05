@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>True Balance Teleprompter</title>
+<style>
+  :root{
+    --bg:#0a0e12; --panel:#12181f; --line:#1f2a33;
+    --teal:#2A8C8C; --cream:#E3E5D8; --dim:#7d8a93;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--cream);
+    font-family:Georgia,serif; overflow:hidden;
+    display:flex; flex-direction:column; height:100vh;
+  }
+  #guide{
+    position:absolute; top:38%; left:0; right:0; height:2px; z-index:5;
+    pointer-events:none;
+    background:linear-gradient(90deg,transparent,#2A8C8C66,transparent);
+  }
+  #scroll{
+    flex:1; overflow-y:auto; scrollbar-width:none; transition:transform .2s;
+  }
+  #scroll::-webkit-scrollbar{display:none}
+  #editor{
+    width:100%; min-height:100%; background:transparent; color:var(--cream);
+    border:none; outline:none; resize:none; font-family:Georgia,serif;
+    font-size:22px; line-height:1.6; padding:40px 8%;
+  }
+  #display{
+    padding:45vh 15% 60vh; font-size:54px; line-height:1.55; font-weight:600;
+    white-space:pre-wrap; text-align:center; letter-spacing:.3px; display:none;
+    cursor:pointer;
+  }
+  #bar{
+    background:var(--panel); border-top:1px solid var(--line);
+    padding:12px 16px; display:flex; flex-wrap:wrap; gap:14px; align-items:center;
+    font-family:system-ui,sans-serif; font-size:13px;
+  }
+  button{
+    padding:7px 14px; border-radius:6px; cursor:pointer; font-family:system-ui,sans-serif;
+    font-size:13px; font-weight:600; border:1px solid var(--line);
+    background:transparent; color:var(--cream); transition:.15s;
+  }
+  button.active{border-color:var(--teal); background:#2A8C8C22}
+  button.primary{border-color:var(--teal); background:var(--teal); color:#fff}
+  button.toggle.on{border-color:var(--teal); background:#2A8C8C22; color:var(--teal)}
+  label.slider{display:flex; flex-direction:column; gap:3px; color:var(--dim)}
+  label.slider span{font-size:11px}
+  input[type=range]{width:110px; accent-color:var(--teal)}
+  #hint{color:var(--dim); margin-left:auto; font-size:11px}
+  @media(max-width:640px){#hint{display:none}}
+</style>
+</head>
+<body>
+  <div id="guide"></div>
+  <div id="scroll">
+    <textarea id="editor" placeholder="Paste or type your script...">Paste or type your script here.
+
+This teleprompter scrolls automatically at your chosen speed. Adjust the controls below, then press Play.
+
+Use the mirror toggle if you're reflecting the screen off a beam-splitter glass. Use fullscreen for a clean recording view.</textarea>
+    <div id="display"></div>
+  </div>
+
+  <div id="bar">
+    <button id="editBtn" class="active">Edit</button>
+    <button id="promptBtn">Prompt</button>
+    <button id="playBtn" class="primary" style="display:none">▶ Play</button>
+    <button id="resetBtn" style="display:none">⟲ Reset</button>
+
+    <label class="slider"><span id="speedLbl">Speed 60</span>
+      <input id="speed" type="range" min="10" max="300" step="5" value="60"></label>
+    <label class="slider"><span id="sizeLbl">Size 54</span>
+      <input id="size" type="range" min="24" max="120" step="2" value="54"></label>
+    <label class="slider"><span id="marginLbl">Margin 15%</span>
+      <input id="margin" type="range" min="2" max="35" step="1" value="15"></label>
+
+    <button id="mirrorBtn" class="toggle">Mirror ↔</button>
+    <button id="flipBtn" class="toggle">Flip ↕</button>
+    <button id="fsBtn">⤢ Full</button>
+
+    <span id="hint">Space = play/pause · ↑↓ = speed · click text = play/pause</span>
+  </div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const scroll=$("scroll"), editor=$("editor"), display=$("display");
+  let editing=true, playing=false, speed=60, mirrorH=false, mirrorV=false;
+  let raf=null, lastTs=null, pos=0;
+
+  function applyTransform(){
+    scroll.style.transform = `scale(${mirrorH?-1:1},${mirrorV?-1:1})`;
+  }
+  function setMode(edit){
+    editing=edit; playing=false; cancelAnimationFrame(raf);
+    $("editBtn").classList.toggle("active",edit);
+    $("promptBtn").classList.toggle("active",!edit);
+    editor.style.display = edit?"block":"none";
+    display.style.display = edit?"none":"block";
+    $("playBtn").style.display = edit?"none":"inline-block";
+    $("resetBtn").style.display = edit?"none":"inline-block";
+    if(!edit){ display.textContent=editor.value; scroll.scrollTop=0; pos=0; updatePlay(); }
+  }
+  function updatePlay(){ $("playBtn").textContent = playing?"⏸ Pause":"▶ Play"; }
+  function tick(ts){
+    if(lastTs==null) lastTs=ts;
+    const dt=(ts-lastTs)/1000; lastTs=ts;
+    pos += speed*dt;
+    const max = scroll.scrollHeight - scroll.clientHeight;
+    if(pos>=max){ pos=max; scroll.scrollTop=max; playing=false; updatePlay(); return; }
+    scroll.scrollTop=pos; raf=requestAnimationFrame(tick);
+  }
+  function togglePlay(){
+    if(editing) return;
+    playing=!playing; updatePlay();
+    if(playing){ lastTs=null; pos=scroll.scrollTop; raf=requestAnimationFrame(tick); }
+    else cancelAnimationFrame(raf);
+  }
+  function reset(){ playing=false; updatePlay(); scroll.scrollTop=0; pos=0; cancelAnimationFrame(raf); }
+
+  $("editBtn").onclick=()=>setMode(true);
+  $("promptBtn").onclick=()=>setMode(false);
+  $("playBtn").onclick=togglePlay;
+  $("resetBtn").onclick=reset;
+  display.onclick=togglePlay;
+
+  $("speed").oninput=e=>{speed=+e.target.value; $("speedLbl").textContent="Speed "+speed;};
+  $("size").oninput=e=>{display.style.fontSize=e.target.value+"px"; $("sizeLbl").textContent="Size "+e.target.value;};
+  $("margin").oninput=e=>{display.style.paddingLeft=e.target.value+"%"; display.style.paddingRight=e.target.value+"%"; $("marginLbl").textContent="Margin "+e.target.value+"%";};
+
+  $("mirrorBtn").onclick=e=>{mirrorH=!mirrorH; e.target.classList.toggle("on",mirrorH); applyTransform();};
+  $("flipBtn").onclick=e=>{mirrorV=!mirrorV; e.target.classList.toggle("on",mirrorV); applyTransform();};
+  $("fsBtn").onclick=()=>{ if(!document.fullscreenElement){document.documentElement.requestFullscreen(); $("fsBtn").textContent="⤢ Exit";} else {document.exitFullscreen(); $("fsBtn").textContent="⤢ Full";} };
+
+  document.addEventListener("keydown",e=>{
+    if(editing && e.target.tagName==="TEXTAREA") return;
+    if(e.code==="Space"){e.preventDefault(); togglePlay();}
+    if(e.code==="ArrowUp"){speed=Math.min(300,speed+10); $("speed").value=speed; $("speedLbl").textContent="Speed "+speed;}
+    if(e.code==="ArrowDown"){speed=Math.max(10,speed-10); $("speed").value=speed; $("speedLbl").textContent="Speed "+speed;}
+    if(e.code==="Home"){scroll.scrollTop=0; pos=0;}
+  });
+</script>
+</body>
+</html>
